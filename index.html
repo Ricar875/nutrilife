@@ -1,1 +1,987 @@
 
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NutriVida — Calorias, Combinação e Sugestões por Idade</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700;9..144,900&family=Work+Sans:wght@400;500;600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+<!-- ============================================================
+     CONFIG — edite aqui antes de publicar no GitHub Pages
+     ============================================================ -->
+<script>
+  const CONFIG = {
+    APP_NAME: "NutriVida",
+    SUPABASE_URL: "https://SEU-PROJETO.supabase.co",
+    SUPABASE_ANON_KEY: "SUA_CHAVE_ANON_AQUI",
+    ENABLE_HISTORICO: true,   // requer Supabase configurado (ver instruções no rodapé do código)
+    ENABLE_IA: true           // sugestão personalizada via API da Anthropic (funciona no preview do Claude;
+                               // em produção no GitHub Pages exige um backend/proxy com sua própria chave)
+  };
+</script>
+
+<style>
+  :root{
+    --paper:#F7F3E8;      /* creme premium, aconchegante sem ser genérico */
+    --paper-2:#EFE9D8;
+    --ink:#15150F;        /* quase preto, autoridade e legibilidade */
+    --ink-soft:#5A5748;
+    --forest:#1F3A2E;     /* verde-floresta profundo — saúde, confiança, estabilidade */
+    --forest-light:#3C6E52;
+    --gold:#B08D4F;       /* dourado suave — qualidade, exclusividade */
+    --terracotta:#C4622D; /* estimula apetite e energia — usado com intenção nos CTAs */
+    --plum:#5C2A3E;       /* riqueza, sofisticação — reservado a destaques */
+    --card:#FFFFFF;
+    --radius:3px;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{
+    background:var(--paper);
+    color:var(--ink);
+    font-family:'Work Sans', sans-serif;
+    line-height:1.5;
+    -webkit-font-smoothing:antialiased;
+    padding-bottom:60px;
+  }
+  ::selection{ background:var(--gold); color:#fff; }
+
+  a{ color:var(--forest); }
+
+  /* ---------- Header ---------- */
+  body{
+    background-image:
+      repeating-linear-gradient(0deg, rgba(21,21,15,0.025) 0px, rgba(21,21,15,0.025) 1px, transparent 1px, transparent 26px);
+  }
+  header{
+    padding:36px 20px 0;
+    background:
+      radial-gradient(ellipse 480px 300px at 88% -10%, rgba(196,98,45,0.35), transparent 60%),
+      radial-gradient(ellipse 380px 260px at -10% 110%, rgba(176,141,79,0.28), transparent 55%),
+      linear-gradient(160deg, #1F3A2E, #16281F 85%);
+    color:var(--paper);
+    position:relative;
+    overflow:hidden;
+  }
+  header::after{
+    content:'';
+    display:block;
+    height:4px;
+    margin-top:26px;
+    background:linear-gradient(90deg, var(--gold), var(--terracotta) 60%, var(--gold));
+  }
+  .eyebrow{
+    font-family:'Space Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.16em;
+    text-transform:uppercase;
+    color:var(--gold);
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+  }
+  .eyebrow .tag{
+    border:1px solid var(--gold);
+    padding:2px 8px;
+    border-radius:20px;
+    color:var(--paper);
+  }
+  h1{
+    font-family:'Fraunces', serif;
+    font-optical-sizing:auto;
+    font-weight:900;
+    font-size:clamp(48px, 15vw, 70px);
+    line-height:0.9;
+    margin-top:12px;
+    letter-spacing:-0.02em;
+    color:var(--paper);
+  }
+  h1 .line2{
+    display:block;
+    font-style:italic;
+    font-weight:400;
+    color:var(--gold);
+    font-size:0.6em;
+    margin-top:-0.08em;
+  }
+  .subhead{
+    font-size:14.5px;
+    color:#D8D2BE;
+    margin-top:16px;
+    max-width:40ch;
+    padding-bottom:20px;
+  }
+  /* barcode-style device — nods to the nutrition-label subject */
+  .barcode{
+    display:flex;
+    align-items:flex-end;
+    gap:2px;
+    height:30px;
+    margin:4px 0 0;
+    opacity:0.85;
+  }
+  .barcode span{
+    display:block;
+    width:2px;
+    background:var(--gold);
+  }
+  .barcode-caption{
+    display:flex;
+    justify-content:space-between;
+    font-family:'Space Mono', monospace;
+    font-size:9.5px;
+    letter-spacing:0.1em;
+    color:#A79E82;
+    padding:5px 0 20px;
+    text-transform:uppercase;
+  }
+
+  /* ---------- Tabs ---------- */
+  nav.tabs{
+    display:flex;
+    overflow-x:auto;
+    background:rgba(31,58,46,0.88);
+    backdrop-filter:blur(10px) saturate(140%);
+    -webkit-backdrop-filter:blur(10px) saturate(140%);
+    position:sticky; top:0; z-index:10;
+    scrollbar-width:none;
+    box-shadow:0 4px 16px rgba(0,0,0,0.18);
+  }
+  nav.tabs::-webkit-scrollbar{ display:none; }
+  nav.tabs button{
+    font-family:'Space Mono', monospace;
+    font-size:11px;
+    letter-spacing:0.06em;
+    text-transform:uppercase;
+    white-space:nowrap;
+    padding:16px 17px 13px;
+    background:none;
+    border:none;
+    border-right:1px solid rgba(247,243,232,0.12);
+    border-bottom:3px solid transparent;
+    color:#B7B09A;
+    cursor:pointer;
+    transition:color .15s, border-color .15s;
+    display:inline-flex;
+    align-items:center;
+    gap:6px;
+  }
+  nav.tabs button svg{ flex-shrink:0; opacity:0.85; }
+  nav.tabs button:last-child{ border-right:none; }
+  nav.tabs button:hover{ color:var(--paper); }
+  nav.tabs button.active{
+    color:var(--paper);
+    font-weight:700;
+    border-bottom:3px solid var(--gold);
+  }
+
+  main{ padding:22px 18px 10px; max-width:640px; margin:0 auto; }
+  section.panel{ display:none; }
+  section.panel.active{ display:block; animation:fade .25s ease; }
+  @keyframes fade{ from{opacity:0; transform:translateY(4px);} to{opacity:1; transform:none;} }
+
+  h2.section-title{
+    font-family:'Fraunces', serif;
+    font-optical-sizing:auto;
+    font-weight:700;
+    font-size:28px;
+    letter-spacing:-0.01em;
+    margin-bottom:5px;
+    padding-top:14px;
+    position:relative;
+  }
+  h2.section-title::before{
+    content:'';
+    position:absolute;
+    top:0; left:0;
+    width:42px; height:3px;
+    background:var(--gold);
+  }
+  p.section-note{
+    font-size:13.5px;
+    color:var(--ink-soft);
+    margin-bottom:20px;
+    max-width:52ch;
+  }
+
+  /* ---------- Form elements ---------- */
+  label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-family:'Space Mono', monospace;
+    font-size:10px;
+    letter-spacing:0.09em;
+    text-transform:uppercase;
+    color:var(--forest);
+    font-weight:700;
+    margin-bottom:7px;
+  }
+  label::before{
+    content:'';
+    width:5px; height:5px;
+    border-radius:50%;
+    background:var(--gold);
+    flex-shrink:0;
+  }
+  .field{ margin-bottom:18px; }
+  input, select{
+    width:100%;
+    padding:13px 14px;
+    font-family:'Work Sans', sans-serif;
+    font-size:15px;
+    font-weight:500;
+    border:1.5px solid #DCD5C1;
+    border-radius:10px;
+    background:#fff;
+    color:var(--ink);
+    box-shadow:inset 0 1px 2px rgba(21,21,15,0.04);
+    transition:border-color .15s, box-shadow .15s;
+  }
+  select{
+    appearance:none;
+    -webkit-appearance:none;
+    background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%231F3A2E' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat:no-repeat;
+    background-position:right 14px center;
+    padding-right:38px;
+  }
+  input:hover, select:hover{ border-color:var(--gold); }
+  input:focus, select:focus{
+    outline:none;
+    border-color:var(--terracotta);
+    box-shadow:0 0 0 4px rgba(196,98,45,0.13);
+  }
+  button:focus-visible{
+    outline:3px solid var(--terracotta);
+    outline-offset:1px;
+  }
+  .grid2{ display:grid; grid-template-columns:1fr 1fr; gap:14px; }
+
+  .form-card{
+    background:var(--card);
+    border-radius:14px;
+    padding:22px 18px 8px;
+    box-shadow:0 8px 28px rgba(21,21,15,0.07);
+    border:1px solid #EFE9D8;
+    margin-bottom:4px;
+  }
+
+  .btn{
+    display:inline-block;
+    width:100%;
+    padding:15px 16px;
+    background:linear-gradient(135deg, var(--terracotta), #A9501E);
+    color:#fff;
+    border:none;
+    font-family:'Space Mono', monospace;
+    font-size:12.5px;
+    letter-spacing:0.08em;
+    text-transform:uppercase;
+    font-weight:700;
+    border-radius:var(--radius);
+    cursor:pointer;
+    margin-top:6px;
+    box-shadow:0 3px 0 #7A3712, 0 6px 14px rgba(164,74,25,0.25);
+    transition:transform .1s, box-shadow .1s;
+  }
+  .btn:active{ transform:translateY(3px); box-shadow:0 0 0 #7A3712; }
+  .btn.secondary{ background:linear-gradient(135deg, var(--forest-light), var(--forest)); box-shadow:0 3px 0 #14261D, 0 6px 14px rgba(31,58,46,0.25); }
+  .btn.secondary:active{ box-shadow:0 0 0 #14261D; }
+  .btn.ghost{ background:transparent; color:var(--ink); border:2px solid var(--ink); box-shadow:none; }
+  .btn.ghost:active{ transform:none; }
+  .btn:disabled{ background:#C9C3AE; box-shadow:none; cursor:not-allowed; }
+
+  /* ---------- Nutrition-label style result card (signature element) ---------- */
+  .label-card{
+    background:var(--card);
+    border:3px solid var(--forest);
+    padding:18px 20px;
+    margin-top:28px;
+    display:none;
+    box-shadow:8px 8px 0 var(--forest), 8px 8px 22px rgba(31,58,46,0.25);
+    position:relative;
+  }
+  .label-card.show{ display:block; animation:fade .3s ease; }
+  .label-card::before{
+    content:'';
+    position:absolute;
+    top:-3px; left:14px; right:14px; height:3px;
+    background-image:radial-gradient(circle, var(--paper) 2.5px, transparent 2.5px);
+    background-size:12px 3px;
+    background-repeat:repeat-x;
+  }
+  .label-card h3{
+    font-family:'Fraunces', serif;
+    font-optical-sizing:auto;
+    font-weight:900;
+    font-size:23px;
+    letter-spacing:-0.01em;
+    color:var(--forest);
+    border-bottom:8px solid var(--forest);
+    padding-bottom:9px;
+    margin-bottom:6px;
+  }
+  .label-row{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    padding:10px 0;
+    border-bottom:1px solid #E4DFCE;
+    font-family:'Space Mono', monospace;
+    font-size:13.5px;
+  }
+  .label-row.thick{ border-bottom:3px solid var(--gold); font-weight:700; }
+  .label-row .val{ font-weight:700; font-size:16.5px; color:var(--terracotta); }
+  .label-foot{
+    font-size:11.5px;
+    color:var(--ink-soft);
+    margin-top:12px;
+    line-height:1.45;
+  }
+
+  /* ---------- Cards for age groups / food combining ---------- */
+  .age-card{
+    background:var(--card);
+    border-left:6px solid var(--forest-light);
+    padding:18px 18px 16px;
+    margin-bottom:16px;
+    position:relative;
+    box-shadow:0 6px 20px rgba(31,58,46,0.12);
+  }
+  .age-card.teen{ border-color:var(--terracotta); }
+  .age-card.adult{ border-color:var(--plum); }
+  .age-card.senior{ border-color:var(--gold); }
+  .age-card .idx{
+    position:absolute;
+    top:12px; right:16px;
+    font-family:'Fraunces', serif;
+    font-optical-sizing:auto;
+    font-weight:900;
+    font-size:36px;
+    color:rgba(21,21,15,0.07);
+    line-height:1;
+  }
+  .age-card h3{
+    font-family:'Fraunces', serif;
+    font-size:19px;
+    font-weight:700;
+    margin-bottom:3px;
+  }
+  .age-card .range{
+    font-family:'Space Mono', monospace;
+    font-size:11px;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    margin-bottom:10px;
+    display:block;
+  }
+  .age-card ul{ margin-left:18px; font-size:14px; }
+  .age-card li{ margin-bottom:4px; }
+  .age-card .avoid{ margin-top:10px; font-size:13px; color:var(--plum); }
+
+  .combo-row{
+    display:flex;
+    gap:12px;
+    padding:12px 0;
+    border-bottom:1px solid #ccc;
+    align-items:flex-start;
+  }
+  .combo-tag{
+    font-family:'Space Mono', monospace;
+    font-size:11px;
+    font-weight:700;
+    padding:3px 8px;
+    border-radius:20px;
+    white-space:nowrap;
+    margin-top:1px;
+  }
+  .combo-tag.good{ background:#DCE7D6; color:var(--forest); }
+  .combo-tag.bad{ background:#F1DCE1; color:var(--plum); }
+  .combo-text{ font-size:14px; }
+  .disclaimer{
+    font-size:12px;
+    color:var(--ink-soft);
+    background:var(--paper-2);
+    border-left:4px solid var(--gold);
+    padding:10px 12px;
+    margin-top:18px;
+    line-height:1.45;
+  }
+
+  /* ---------- Auth / history ---------- */
+  .auth-box{
+    background:var(--card);
+    border-radius:14px;
+    border:1px solid #EFE9D8;
+    box-shadow:0 8px 28px rgba(21,21,15,0.07);
+    padding:22px 18px 8px;
+    margin-bottom:18px;
+  }
+  .hist-row{
+    display:flex; justify-content:space-between;
+    padding:10px 0; border-bottom:1px solid #ccc;
+    font-size:13.5px;
+  }
+  .hist-row .d{ font-family:'Space Mono', monospace; color:var(--ink-soft); font-size:12px; }
+  .status-msg{ font-size:13px; margin-top:10px; color:var(--ink-soft); }
+
+  /* ---------- AI panel ---------- */
+  .ai-result{
+    background:var(--card);
+    border:2px solid var(--forest);
+    padding:16px;
+    margin-top:16px;
+    font-size:14.5px;
+    white-space:pre-wrap;
+    display:none;
+  }
+  .ai-result.show{ display:block; }
+  .loading{ font-family:'Space Mono', monospace; font-size:12px; color:var(--ink-soft); margin-top:10px; display:none; }
+  .loading.show{ display:block; }
+
+  footer{
+    text-align:center;
+    padding:34px 20px 14px;
+  }
+  footer .fmark{
+    font-family:'Fraunces', serif;
+    font-style:italic;
+    font-weight:600;
+    font-size:15px;
+    color:var(--forest);
+  }
+  footer .fline{
+    width:36px; height:2px; background:var(--gold);
+    margin:8px auto;
+  }
+  footer .fcap{
+    font-family:'Space Mono', monospace;
+    font-size:9.5px;
+    color:var(--ink-soft);
+    text-transform:uppercase;
+    letter-spacing:0.1em;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="eyebrow"><span class="tag">Nutrição · todas as idades</span><span id="today"></span></div>
+  <h1>Nutri<span class="line2">Vida</span></h1>
+  <p class="subhead">Calorias, combinação de alimentos e sugestões pensadas para cada fase da vida — da infância à melhor idade.</p>
+  <div class="barcode" id="barcode"></div>
+  <div class="barcode-caption"><span>Composição do app</span><span>calc · foto · combo · idades · ia</span></div>
+</header>
+
+<nav class="tabs">
+  <button class="tab-btn active" data-tab="calc"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="12" x2="8" y2="12"/><line x1="12" y1="12" x2="12" y2="12"/><line x1="16" y1="12" x2="16" y2="12"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="12" y1="16" x2="12" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg> Calculadora</button>
+  <button class="tab-btn" data-tab="foto"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 8h3l2-2h6l2 2h3v12H4z"/><circle cx="12" cy="14" r="3.5"/></svg> Foto do Prato</button>
+  <button class="tab-btn" data-tab="combo"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 7h11l-3-3"/><path d="M17 17H6l3 3"/></svg> Combinação</button>
+  <button class="tab-btn" data-tab="idades"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="3.5"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><circle cx="18" cy="9" r="2.5"/><path d="M22 21c0-3-1.8-4.8-4-5.3"/></svg> Por Idade</button>
+  <button class="tab-btn" data-tab="historico"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg> Histórico</button>
+  <button class="tab-btn" data-tab="ia"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 3v4M12 17v4M3 12h4M17 12h4M5.6 5.6l2.8 2.8M15.6 15.6l2.8 2.8M18.4 5.6l-2.8 2.8M8.4 15.6l-2.8 2.8"/></svg> Sugestão IA</button>
+</nav>
+
+<main>
+
+  <!-- ===================== CALCULADORA ===================== -->
+  <section class="panel active" id="calc">
+    <h2 class="section-title">Calculadora de calorias</h2>
+    <p class="section-note">Estimativa de gasto energético diário (TDEE) pela fórmula de Mifflin-St Jeor.</p>
+
+    <div class="form-card">
+    <div class="field">
+      <label>Idade (anos)</label>
+      <input type="number" id="c-idade" placeholder="Ex: 34" min="2" max="110">
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label>Sexo biológico</label>
+        <select id="c-sexo">
+          <option value="M">Masculino</option>
+          <option value="F">Feminino</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Objetivo</label>
+        <select id="c-objetivo">
+          <option value="manter">Manter peso</option>
+          <option value="perder">Perder peso</option>
+          <option value="ganhar">Ganhar peso</option>
+        </select>
+      </div>
+    </div>
+    <div class="grid2">
+      <div class="field">
+        <label>Peso (kg)</label>
+        <input type="number" id="c-peso" placeholder="Ex: 78">
+      </div>
+      <div class="field">
+        <label>Altura (cm)</label>
+        <input type="number" id="c-altura" placeholder="Ex: 172">
+      </div>
+    </div>
+    <div class="field">
+      <label>Nível de atividade física</label>
+      <select id="c-atividade">
+        <option value="1.2">Sedentário (pouco ou nenhum exercício)</option>
+        <option value="1.375">Leve (exercício 1–3x/semana)</option>
+        <option value="1.55" selected>Moderado (exercício 3–5x/semana)</option>
+        <option value="1.725">Intenso (exercício 6–7x/semana)</option>
+        <option value="1.9">Muito intenso (atleta / trabalho físico pesado)</option>
+      </select>
+    </div>
+    </div>
+
+    <button class="btn" onclick="calcularCalorias()">Calcular</button>
+
+    <div class="label-card" id="resultado-card">
+      <h3>Informação Calórica</h3>
+      <div class="label-row thick"><span>Gasto basal (TMB)</span><span class="val" id="r-tmb">–</span></div>
+      <div class="label-row thick"><span>Gasto total diário (TDEE)</span><span class="val" id="r-tdee">–</span></div>
+      <div class="label-row"><span>Meta calórica para o objetivo</span><span class="val" id="r-meta">–</span></div>
+      <div class="label-row"><span>Proteína sugerida /dia</span><span class="val" id="r-prot">–</span></div>
+      <div class="label-row"><span>Água sugerida /dia</span><span class="val" id="r-agua">–</span></div>
+      <p class="label-foot" id="r-nota"></p>
+    </div>
+
+    <p class="disclaimer">Estimativa educativa, não substitui avaliação de nutricionista. Para crianças, adolescentes, gestantes ou condições clínicas, os valores calóricos ideais variam e devem ser acompanhados por profissional.</p>
+  </section>
+
+  <!-- ===================== FOTO DO PRATO ===================== -->
+  <section class="panel" id="foto">
+    <h2 class="section-title">Foto do prato</h2>
+    <p class="section-note">Tire uma foto ou envie uma imagem do seu prato. A IA identifica os alimentos e estima as calorias.</p>
+
+    <div class="form-card">
+    <div class="field">
+      <label>Foto do prato</label>
+      <input type="file" id="f-input" accept="image/*" capture="environment" onchange="preverFoto()">
+    </div>
+    </div>
+
+    <img id="f-preview" style="display:none; width:100%; border-radius:14px; box-shadow:0 8px 28px rgba(21,21,15,0.12); margin:16px 0;">
+
+    <button class="btn secondary" id="f-btn" onclick="analisarFoto()" disabled>Analisar prato</button>
+    <p class="loading" id="f-loading">Analisando a foto...</p>
+
+    <div class="label-card" id="f-resultado">
+      <h3>Estimativa do Prato</h3>
+      <div id="f-conteudo" style="font-size:14px; white-space:pre-wrap;"></div>
+    </div>
+
+    <p class="disclaimer">Estimativa por IA a partir de uma imagem — a precisão depende do ângulo, da porção visível e de itens escondidos (molhos, óleo). Use como referência, não como medição exata.</p>
+  </section>
+
+  <!-- ===================== COMBINAÇÃO ALIMENTAR ===================== -->
+  <section class="panel" id="combo">
+    <h2 class="section-title">Combinação de alimentos</h2>
+    <p class="section-note">Boas práticas de combinação alimentar (trofologia) para melhorar digestão e absorção de nutrientes.</p>
+
+    <div id="combo-list"></div>
+
+    <p class="disclaimer">A trofologia (teoria da combinação alimentar) é uma tradição popular na nutrição natural, mas tem evidência científica limitada e é vista com ceticismo por parte da ciência nutricional convencional. Use como orientação geral, não como regra rígida — a base de uma boa alimentação continua sendo variedade, qualidade e quantidade adequada dos alimentos.</p>
+  </section>
+
+  <!-- ===================== POR IDADE ===================== -->
+  <section class="panel" id="idades">
+    <h2 class="section-title">Sugestões por faixa etária</h2>
+    <p class="section-note">Prioridades nutricionais e alimentos de referência para cada fase da vida.</p>
+    <div id="idades-list"></div>
+  </section>
+
+  <!-- ===================== HISTÓRICO ===================== -->
+  <section class="panel" id="historico">
+    <h2 class="section-title">Meu histórico</h2>
+    <p class="section-note">Salve seus cálculos diários para acompanhar sua evolução (requer Supabase configurado).</p>
+
+    <div class="auth-box" id="auth-box">
+      <div class="field">
+        <label>E-mail</label>
+        <input type="email" id="h-email" placeholder="seu@email.com">
+      </div>
+      <div class="field">
+        <label>Senha</label>
+        <input type="password" id="h-senha" placeholder="••••••••">
+      </div>
+      <button class="btn secondary" onclick="entrarOuCadastrar()">Entrar / Cadastrar</button>
+      <p class="status-msg" id="auth-status"></p>
+    </div>
+
+    <div id="hist-area" style="display:none;">
+      <button class="btn" onclick="salvarHistorico()">Salvar cálculo de hoje</button>
+      <div id="hist-list" style="margin-top:18px;"></div>
+      <button class="btn ghost" onclick="sair()">Sair</button>
+    </div>
+  </section>
+
+  <!-- ===================== IA ===================== -->
+  <section class="panel" id="ia">
+    <h2 class="section-title">Sugestão personalizada com IA</h2>
+    <p class="section-note">Gera um cardápio-modelo do dia com base nos dados que você já informou na calculadora.</p>
+
+    <div class="form-card">
+    <div class="field">
+      <label>Restrições ou preferências (opcional)</label>
+      <input type="text" id="ia-restricao" placeholder="Ex: vegetariano, sem lactose, sem glúten...">
+    </div>
+    </div>
+
+    <button class="btn secondary" onclick="gerarSugestaoIA()">Gerar sugestão do dia</button>
+    <p class="loading" id="ia-loading">Gerando sugestão...</p>
+    <div class="ai-result" id="ia-result"></div>
+  </section>
+
+</main>
+
+<footer>
+  <div class="fmark">NutriVida</div>
+  <div class="fline"></div>
+  <div class="fcap">Digital Chevalier Card</div>
+</footer>
+
+<script>
+/* ============================================================
+   Data / estado
+   ============================================================ */
+document.getElementById('today').textContent = new Date().toLocaleDateString('pt-BR', { day:'2-digit', month:'short', year:'numeric' }).toUpperCase();
+
+/* barcode decorativo — larguras pseudo-aleatórias fixas para um padrão consistente */
+(function gerarBarcode(){
+  const larguras = [2,4,2,6,2,2,8,2,4,2,2,6,4,2,8,2,2,4,2,6,2,8,2,4,2,2,6,2,4,8,2,2,4,2,6,2,2,8,4,2];
+  const el = document.getElementById('barcode');
+  el.innerHTML = larguras.map(w => `<span style="width:${w}px; height:${18 + (w%3)*6}px;"></span>`).join('');
+})();
+
+let ultimoCalculo = null; // guarda o resultado mais recente da calculadora, usado no histórico e na IA
+
+/* ============================================================
+   Tabs
+   ============================================================ */
+document.querySelectorAll('.tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=>{
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.tab).classList.add('active');
+  });
+});
+
+/* ============================================================
+   Calculadora de calorias (Mifflin-St Jeor)
+   ============================================================ */
+function calcularCalorias(){
+  const idade = parseFloat(document.getElementById('c-idade').value);
+  const sexo = document.getElementById('c-sexo').value;
+  const peso = parseFloat(document.getElementById('c-peso').value);
+  const altura = parseFloat(document.getElementById('c-altura').value);
+  const atividade = parseFloat(document.getElementById('c-atividade').value);
+  const objetivo = document.getElementById('c-objetivo').value;
+
+  if(!idade || !peso || !altura){
+    alert('Preencha idade, peso e altura.');
+    return;
+  }
+
+  let tmb = sexo === 'M'
+    ? (10*peso + 6.25*altura - 5*idade + 5)
+    : (10*peso + 6.25*altura - 5*idade - 161);
+
+  let tdee = tmb * atividade;
+
+  let meta = tdee;
+  if(objetivo === 'perder') meta = tdee - 500;
+  if(objetivo === 'ganhar') meta = tdee + 500;
+
+  const proteina = Math.round(peso * 1.8); // g/dia, faixa ativa
+  const agua = (peso * 35 / 1000).toFixed(1); // litros/dia
+
+  document.getElementById('r-tmb').textContent = Math.round(tmb) + ' kcal';
+  document.getElementById('r-tdee').textContent = Math.round(tdee) + ' kcal';
+  document.getElementById('r-meta').textContent = Math.round(meta) + ' kcal';
+  document.getElementById('r-prot').textContent = proteina + ' g';
+  document.getElementById('r-agua').textContent = agua + ' L';
+
+  let nota = '';
+  if(idade < 18){
+    nota = 'Menor de 18 anos: essa fórmula foi validada para adultos. Em crianças e adolescentes, use como referência aproximada e priorize acompanhamento com pediatra/nutricionista.';
+  } else if(idade >= 60){
+    nota = 'A partir dos 60 anos, a necessidade de proteína tende a ser um pouco maior por grama de peso corporal para preservar massa muscular.';
+  } else {
+    nota = 'Estimativa baseada na fórmula de Mifflin-St Jeor, considerada uma das mais precisas para adultos.';
+  }
+  document.getElementById('r-nota').textContent = nota;
+  document.getElementById('resultado-card').classList.add('show');
+
+  ultimoCalculo = { idade, sexo, peso, altura, objetivo, tmb: Math.round(tmb), tdee: Math.round(tdee), meta: Math.round(meta), proteina, agua };
+}
+
+/* ============================================================
+   Combinação alimentar — dados
+   ============================================================ */
+const combinacoes = [
+  { tipo:'good', texto:'Vegetais folhosos (alface, rúcula, couve) combinam bem com qualquer proteína ou carboidrato — são neutros e favorecem a digestão.' },
+  { tipo:'good', texto:'Proteína magra (frango, peixe, ovo) + vegetais coloridos: combinação leve, boa absorção de nutrientes.' },
+  { tipo:'good', texto:'Carboidrato complexo (arroz integral, batata-doce) + leguminosas (feijão, lentilha): juntos formam proteína completa.' },
+  { tipo:'good', texto:'Frutas ácidas (laranja, abacaxi, limão) ajudam a absorção de ferro quando consumidas perto de refeições com feijão ou carnes.' },
+  { tipo:'bad', texto:'Frutas doces (banana, manga) logo após refeições pesadas podem fermentar mais facilmente no estômago — prefira consumir frutas isoladamente, 20–30 min antes das refeições.' },
+  { tipo:'bad', texto:'Leite integral junto de refeições salgadas e gordurosas pode deixar a digestão mais lenta em pessoas sensíveis.' },
+  { tipo:'bad', texto:'Excesso de carboidrato refinado + proteína animal em grande quantidade na mesma refeição sobrecarrega a digestão — prefira moderar as porções.' },
+  { tipo:'good', texto:'Gorduras boas (azeite, abacate, castanhas) ajudam a absorver vitaminas lipossolúveis (A, D, E, K) presentes nos vegetais.' },
+];
+
+function renderCombinacoes(){
+  const el = document.getElementById('combo-list');
+  el.innerHTML = combinacoes.map(c => `
+    <div class="combo-row">
+      <span class="combo-tag ${c.tipo}">${c.tipo === 'good' ? 'BOA' : 'EVITAR'}</span>
+      <span class="combo-text">${c.texto}</span>
+    </div>
+  `).join('');
+}
+renderCombinacoes();
+
+/* ============================================================
+   Sugestões por idade — dados
+   ============================================================ */
+const faixas = [
+  {
+    classe:'', nome:'Crianças', range:'2 a 12 anos',
+    foco:['Cálcio e vitamina D para ossos (leite, iogurte, queijo)','Ferro para desenvolvimento cognitivo (feijão, carnes magras, folhas verde-escuras)','Frutas variadas todos os dias (banana, mamão, maçã)','Proteína de qualidade em porções pequenas e frequentes (ovo, frango desfiado, peixe)'],
+    evitar:'Evitar excesso de açúcar, refrigerantes e ultraprocessados — priorizar comida de verdade em porções adequadas à idade.'
+  },
+  {
+    classe:'teen', nome:'Adolescentes', range:'13 a 17 anos',
+    foco:['Maior demanda calórica e proteica pelo crescimento acelerado','Cálcio e ferro em dobro (leite e derivados, carnes, leguminosas)','Carboidratos complexos para energia sustentada (arroz integral, aveia, batata-doce)','Ômega-3 para desenvolvimento cerebral (peixes, chia, linhaça)'],
+    evitar:'Evitar dietas restritivas sem acompanhamento profissional — essa é uma fase crítica de crescimento.'
+  },
+  {
+    classe:'adult', nome:'Adultos', range:'18 a 59 anos',
+    foco:['Equilíbrio entre proteínas, carboidratos e gorduras boas','Fibras para saúde intestinal (vegetais, grãos integrais, frutas com casca)','Proteína magra distribuída ao longo do dia (peixe, frango, ovos, leguminosas)','Gorduras boas com moderação (azeite, abacate, oleaginosas)'],
+    evitar:'Reduzir sódio, açúcar e ultraprocessados; manter boa hidratação diária.'
+  },
+  {
+    classe:'senior', nome:'Idosos', range:'60 anos ou mais',
+    foco:['Proteína de fácil digestão para preservar massa muscular (ovo, peixe, frango, iogurte)','Cálcio e vitamina D reforçados para saúde óssea','Fibras e boa hidratação para função intestinal','Alimentos macios e bem cozidos quando houver dificuldade de mastigação'],
+    evitar:'Atenção ao excesso de sódio (pressão arterial) e a interações entre alimentos e medicamentos — consultar nutricionista é recomendado.'
+  },
+];
+
+function renderFaixas(){
+  const el = document.getElementById('idades-list');
+  el.innerHTML = faixas.map((f,i) => `
+    <div class="age-card ${f.classe}">
+      <span class="idx">${String(i+1).padStart(2,'0')}</span>
+      <h3>${f.nome}</h3>
+      <span class="range">${f.range}</span>
+      <ul>${f.foco.map(i=>`<li>${i}</li>`).join('')}</ul>
+      <p class="avoid">${f.evitar}</p>
+    </div>
+  `).join('');
+}
+renderFaixas();
+
+/* ============================================================
+   Supabase — histórico
+   ============================================================ */
+let supabase = null;
+if(CONFIG.ENABLE_HISTORICO && window.supabase){
+  supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+}
+
+async function entrarOuCadastrar(){
+  if(!supabase){ document.getElementById('auth-status').textContent = 'Supabase não configurado no CONFIG.'; return; }
+  const email = document.getElementById('h-email').value;
+  const senha = document.getElementById('h-senha').value;
+  if(!email || !senha){ document.getElementById('auth-status').textContent = 'Preencha e-mail e senha.'; return; }
+
+  document.getElementById('auth-status').textContent = 'Entrando...';
+  let { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+
+  if(error){
+    // tenta cadastrar se não existir ainda
+    const cad = await supabase.auth.signUp({ email, password: senha });
+    if(cad.error){ document.getElementById('auth-status').textContent = 'Erro: ' + cad.error.message; return; }
+    document.getElementById('auth-status').textContent = 'Conta criada! Verifique seu e-mail se a confirmação estiver ativada.';
+  } else {
+    document.getElementById('auth-status').textContent = 'Login realizado.';
+    document.getElementById('auth-box').style.display = 'none';
+    document.getElementById('hist-area').style.display = 'block';
+    carregarHistorico();
+  }
+}
+
+async function sair(){
+  if(supabase) await supabase.auth.signOut();
+  document.getElementById('auth-box').style.display = 'block';
+  document.getElementById('hist-area').style.display = 'none';
+}
+
+async function salvarHistorico(){
+  if(!supabase){ alert('Supabase não configurado.'); return; }
+  if(!ultimoCalculo){ alert('Calcule suas calorias na aba Calculadora primeiro.'); return; }
+  const { data: userData } = await supabase.auth.getUser();
+  if(!userData.user){ alert('Faça login primeiro.'); return; }
+
+  const { error } = await supabase.from('historico').insert({
+    user_id: userData.user.id,
+    peso: ultimoCalculo.peso,
+    tdee: ultimoCalculo.tdee,
+    meta: ultimoCalculo.meta,
+    objetivo: ultimoCalculo.objetivo,
+  });
+  if(error){ alert('Erro ao salvar: ' + error.message); return; }
+  carregarHistorico();
+}
+
+async function carregarHistorico(){
+  if(!supabase) return;
+  const { data: userData } = await supabase.auth.getUser();
+  if(!userData.user) return;
+  const { data, error } = await supabase
+    .from('historico')
+    .select('*')
+    .eq('user_id', userData.user.id)
+    .order('created_at', { ascending:false })
+    .limit(20);
+  if(error) return;
+  document.getElementById('hist-list').innerHTML = data.map(r => `
+    <div class="hist-row">
+      <span class="d">${new Date(r.created_at).toLocaleDateString('pt-BR')}</span>
+      <span>Peso: ${r.peso}kg · Meta: ${r.meta}kcal · ${r.objetivo}</span>
+    </div>
+  `).join('') || '<p class="status-msg">Nenhum registro ainda.</p>';
+}
+
+/* ============================================================
+   Foto do prato — estimativa de calorias via IA (visão)
+   Chama nossa própria function (/api/analisar-foto), que guarda
+   a chave da Anthropic em segurança no servidor da Vercel.
+   ============================================================ */
+let fotoBase64 = null;
+let fotoMediaType = null;
+
+function preverFoto(){
+  const input = document.getElementById('f-input');
+  const file = input.files[0];
+  if(!file) return;
+
+  fotoMediaType = file.type;
+  const reader = new FileReader();
+  reader.onload = () => {
+    fotoBase64 = reader.result.split(',')[1];
+    const preview = document.getElementById('f-preview');
+    preview.src = reader.result;
+    preview.style.display = 'block';
+    document.getElementById('f-btn').disabled = false;
+    document.getElementById('f-resultado').classList.remove('show');
+  };
+  reader.readAsDataURL(file);
+}
+
+async function analisarFoto(){
+  if(!fotoBase64){ alert('Escolha uma foto primeiro.'); return; }
+
+  const loadingEl = document.getElementById('f-loading');
+  const resultCard = document.getElementById('f-resultado');
+  const conteudo = document.getElementById('f-conteudo');
+
+  loadingEl.classList.add('show');
+  resultCard.classList.remove('show');
+
+  try{
+    const response = await fetch("/api/analisar-foto", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ imageBase64: fotoBase64, mediaType: fotoMediaType })
+    });
+    const data = await response.json();
+    conteudo.textContent = data.texto || data.error || 'Não foi possível analisar a foto.';
+    resultCard.classList.add('show');
+  }catch(e){
+    conteudo.textContent = 'Erro ao analisar a foto: ' + e.message;
+    resultCard.classList.add('show');
+  }finally{
+    loadingEl.classList.remove('show');
+  }
+}
+
+/* ============================================================
+   Sugestão via IA
+   Chama nossa própria function (/api/sugestao-ia), que guarda
+   a chave da Anthropic em segurança no servidor da Vercel.
+   ============================================================ */
+async function gerarSugestaoIA(){
+  const restricao = document.getElementById('ia-restricao').value;
+  const resultEl = document.getElementById('ia-result');
+  const loadingEl = document.getElementById('ia-loading');
+
+  if(!ultimoCalculo){
+    alert('Calcule suas calorias na aba Calculadora primeiro.');
+    return;
+  }
+
+  loadingEl.classList.add('show');
+  resultEl.classList.remove('show');
+
+  const prompt = `Monte um cardápio de um dia (café da manhã, almoço, lanche, jantar) para uma pessoa de ${ultimoCalculo.idade} anos, objetivo de ${ultimoCalculo.objetivo} peso, meta de aproximadamente ${ultimoCalculo.meta} kcal/dia e ${ultimoCalculo.proteina}g de proteína/dia. ${restricao ? 'Restrições/preferências: ' + restricao + '.' : ''} Use alimentos comuns no Brasil. Responda em português, de forma direta e organizada por refeição, sem introdução.`;
+
+  try{
+    const response = await fetch("/api/sugestao-ia", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ prompt })
+    });
+    const data = await response.json();
+    resultEl.textContent = data.texto || data.error || 'Não foi possível gerar a sugestão.';
+    resultEl.classList.add('show');
+  }catch(e){
+    resultEl.textContent = 'Erro ao gerar sugestão: ' + e.message;
+    resultEl.classList.add('show');
+  }finally{
+    loadingEl.classList.remove('show');
+  }
+}
+</script>
+
+<!-- ============================================================
+     INSTRUÇÕES DE DEPLOY (Ricardo, leia antes de publicar)
+     ============================================================
+     1) SUPABASE (histórico):
+        - Crie um projeto em supabase.com
+        - Cole a URL e a chave anon no bloco CONFIG no topo do arquivo
+        - No SQL editor do Supabase, rode:
+
+          create table historico (
+            id uuid default gen_random_uuid() primary key,
+            user_id uuid references auth.users not null,
+            peso numeric,
+            tdee integer,
+            meta integer,
+            objetivo text,
+            created_at timestamp with time zone default now()
+          );
+          alter table historico enable row level security;
+          create policy "usuarios veem seu proprio historico"
+            on historico for select using (auth.uid() = user_id);
+          create policy "usuarios inserem seu proprio historico"
+            on historico for insert with check (auth.uid() = user_id);
+
+     2) IA (foto do prato + sugestão personalizada):
+        - Este arquivo já chama /api/analisar-foto e /api/sugestao-ia
+          em vez da API da Anthropic direto.
+        - Publique este projeto na Vercel (não no GitHub Pages) para
+          que essas rotas /api existam. Veja o arquivo
+          INSTRUCOES-VERCEL.md na pasta do projeto para o passo a passo.
+        - Configure a variável de ambiente ANTHROPIC_API_KEY no painel
+          da Vercel — nunca coloque a chave direto no HTML público.
+
+     3) Se preferir lançar sem Supabase e sem IA, deixe
+        ENABLE_HISTORICO e ENABLE_IA como false no CONFIG — o app
+        funciona normalmente só com Calculadora, Combinação e Idades.
+     ============================================================ -->
+</body>
+</html>
