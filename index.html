@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="pt-BR">
 <head>
@@ -787,23 +786,23 @@ renderFaixas();
 /* ============================================================
    Supabase — histórico
    ============================================================ */
-let supabase = null;
+let supabaseClient = null;
 if(CONFIG.ENABLE_HISTORICO && window.supabase){
-  supabase = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
+  supabaseClient = window.supabase.createClient(CONFIG.SUPABASE_URL, CONFIG.SUPABASE_ANON_KEY);
 }
 
 async function entrarOuCadastrar(){
-  if(!supabase){ document.getElementById('auth-status').textContent = 'Supabase não configurado no CONFIG.'; return; }
+  if(!supabaseClient){ document.getElementById('auth-status').textContent = 'Supabase não configurado no CONFIG.'; return; }
   const email = document.getElementById('h-email').value;
   const senha = document.getElementById('h-senha').value;
   if(!email || !senha){ document.getElementById('auth-status').textContent = 'Preencha e-mail e senha.'; return; }
 
   document.getElementById('auth-status').textContent = 'Entrando...';
-  let { data, error } = await supabase.auth.signInWithPassword({ email, password: senha });
+  let { data, error } = await supabaseClient.auth.signInWithPassword({ email, password: senha });
 
   if(error){
     // tenta cadastrar se não existir ainda
-    const cad = await supabase.auth.signUp({ email, password: senha });
+    const cad = await supabaseClient.auth.signUp({ email, password: senha });
     if(cad.error){ document.getElementById('auth-status').textContent = 'Erro: ' + cad.error.message; return; }
     document.getElementById('auth-status').textContent = 'Conta criada! Verifique seu e-mail se a confirmação estiver ativada.';
   } else {
@@ -815,18 +814,18 @@ async function entrarOuCadastrar(){
 }
 
 async function sair(){
-  if(supabase) await supabase.auth.signOut();
+  if(supabaseClient) await supabaseClient.auth.signOut();
   document.getElementById('auth-box').style.display = 'block';
   document.getElementById('hist-area').style.display = 'none';
 }
 
 async function salvarHistorico(){
-  if(!supabase){ alert('Supabase não configurado.'); return; }
+  if(!supabaseClient){ alert('Supabase não configurado.'); return; }
   if(!ultimoCalculo){ alert('Calcule suas calorias na aba Calculadora primeiro.'); return; }
-  const { data: userData } = await supabase.auth.getUser();
+  const { data: userData } = await supabaseClient.auth.getUser();
   if(!userData.user){ alert('Faça login primeiro.'); return; }
 
-  const { error } = await supabase.from('historico').insert({
+  const { error } = await supabaseClient.from('historico').insert({
     user_id: userData.user.id,
     peso: ultimoCalculo.peso,
     tdee: ultimoCalculo.tdee,
@@ -838,10 +837,10 @@ async function salvarHistorico(){
 }
 
 async function carregarHistorico(){
-  if(!supabase) return;
-  const { data: userData } = await supabase.auth.getUser();
+  if(!supabaseClient) return;
+  const { data: userData } = await supabaseClient.auth.getUser();
   if(!userData.user) return;
-  const { data, error } = await supabase
+  const { data, error } = await supabaseClient
     .from('historico')
     .select('*')
     .eq('user_id', userData.user.id)
@@ -985,3 +984,4 @@ async function gerarSugestaoIA(){
      ============================================================ -->
 </body>
 </html>
+
